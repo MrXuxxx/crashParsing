@@ -1,0 +1,73 @@
+#!/bin/bash
+
+files=$(ls $(cd $(dirname $0); pwd))
+cd $(cd $(dirname $0); pwd)
+
+for filename in $files
+do
+    if [ "${filename##*.}"x = "ips"x ]; then
+        ips_path=$filename
+    fi
+    if [ "${filename##*.}"x = "dSYM"x ]; then
+        dSYM_path=$filename
+    fi
+done
+
+
+# ips文件不存在，提示并退出
+if [ ! -n $ips_path ]
+then
+    echo -e "\nerror：缺少ips文件路径\n"
+    exit
+fi
+
+# dYSM文件路径不存在，提示并退出
+if [ ! -n $dSYM_path ]
+then
+    echo -e "\nerror：缺少dSYM文件路径\n"
+    exit
+fi
+
+# 检查路径下symbolicatecrash文件是否存在，不存在则提示并退出
+xcode_name="Xcode"
+if [ -n "$3" ]
+then
+xcode_name=$3
+fi
+symbolicatecrash_path="/Applications/${xcode_name}.app/Contents/SharedFrameworks/DVTFoundation.framework/Versions/A/Resources/symbolicatecrash"
+
+if [ ! -e $symbolicatecrash_path ]
+then
+    echo -e "\nerror：文件【${symbolicatecrash_path}】不存在，检查Xcode名称是否为：${xcode_name}\n"
+    exit
+fi
+
+# 创建文件夹，文件夹不存在则新建
+ips_dir_name="ips_symbolicatecrash"
+if [ ! -d $ips_dir_name ]
+then
+    echo -e "\n创建${ips_dir_name}文件夹"
+    mkdir $ips_dir_name
+fi
+
+ips_dir_path=$(pwd)/$ips_dir_name
+
+# 拷贝文件到文件夹中，并修改ips文件后缀为.crash，直接覆盖
+echo -e "\n拷贝文件到文件夹：${ips_dir_path}，并修改ips文件后缀为.crash"
+cp -f $ips_path $ips_dir_name
+ips_name=$ips_path
+ips_name=${ips_name##*/}
+ips_name=${ips_name%.*}
+mv -f $ips_dir_path/${ips_name}.ips $ips_dir_path/${ips_name}.crash
+
+# 符号化文件
+export DEVELOPER_DIR="/Applications/${xcode_name}.app/Contents/Developer"
+$symbolicatecrash_path "${ips_dir_path}/${ips_name}.crash" $dSYM_path > "${ips_dir_path}/${ips_name}_log.crash"
+
+if [ $? == 0 ]
+then
+    echo -e "\n符号化完成，路径："${ips_dir_path}/${ips_name}_log.crash"\n"
+    open ${ips_dir_path}/${ips_name}_log.crash
+else
+    echo -e "\n符号化失败。。。\n"
+fi
